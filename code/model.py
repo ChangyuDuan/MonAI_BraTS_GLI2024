@@ -12,7 +12,7 @@ from monai.inferers import sliding_window_inference
 
 class BasicModelBank:
     """
-    简化的BraTS分割模型，支持基础模型架构和多种损失函数策略
+    简化的分割模型，支持基础模型架构和多种损失函数策略
     """
     def __init__(self, model_name: str = 'UNet', device: str = 'auto'):
         self.model_name = model_name
