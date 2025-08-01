@@ -27,6 +27,7 @@
 ├── DatasetLoader_transforms.py  # 数据加载和预处理
 ├── train.py                     # 训练模块
 ├── evaluate.py                  # 评估模块
+├── inference.py                 # 推理模块
 └── utils.py                     # 工具函数
 ```
 
@@ -50,19 +51,72 @@ pip install nibabel scikit-image
 
 ### 1. 训练模型
 
+#### 单模型训练
+
 ```bash
-# 使用默认配置训练UNet模型
+# 使用默认配置训练UNet模型（默认模型）
 python main.py --mode train --data_dir /path/to/BraTS_data
 
 # 训练特定模型
-python main.py --mode train --model_name SegResNet --epochs 100 --batch_size 4 --data_dir /path/to/BraTS_data
-
-# 使用集成模型训练
-python main.py --mode train --enable_ensemble --epochs 200 --data_dir /path/to/BraTS_data
-
-# 训练多个模型
-python main.py --mode train --model_names UNet SegResNet UNETR --epochs 50 --data_dir /path/to/BraTS_data
+python main.py --mode train --model_names SegResNet --epochs 100 --batch_size 4 --data_dir /path/to/BraTS_data
 ```
+
+#### 多模型集成训练
+
+项目支持多模型集成训练，**只要训练的模型大于一个，一定是集成的**。支持并行和逐个两种训练方式。
+
+##### 多模型并行集成训练（推荐）
+
+并行训练同时训练多个独立模型，然后自动融合，训练速度快，GPU利用率高。
+
+```bash
+# 示例1：多模型并行集成训练（自动集成）
+python main.py --mode train --data_dir /path/to/BraTS_data --model_names UNet SegResNet
+
+# 示例2：多模型并行集成训练（显式指定并行）
+python main.py --mode train --data_dir /path/to/BraTS_data --model_names UNet SegResNet --parallel true
+
+# 训练更多模型的并行集成
+python main.py --mode train --data_dir /path/to/BraTS_data --model_names UNet SegResNet UNETR SwinUNETR AttentionUNet --epochs 100
+```
+
+##### 多模型逐个集成训练（节省内存）
+
+逐个训练依次训练每个模型，然后自动融合，内存使用较低，适合资源受限的环境。
+
+```bash
+# 示例3：多模型逐个集成训练
+python main.py --mode train --data_dir /path/to/BraTS_data --model_names UNet SegResNet --parallel false
+
+# 训练更多模型的逐个集成
+python main.py --mode train --data_dir /path/to/BraTS_data --model_names UNet SegResNet UNETR --parallel false --epochs 200
+```
+
+##### 完整集成训练（所有7个模型）
+
+启用完整集成模式，训练所有7个支持的模型架构并进行融合。
+
+```bash
+# 示例4：完整集成并行训练（所有7个模型）（默认并行）
+python main.py --mode train --data_dir /path/to/BraTS_data --enable_ensemble
+
+# 示例5：完整集成并行训练（所有7个模型）（指定并行）
+python main.py --mode train --data_dir /path/to/BraTS_data --enable_ensemble --parallel true
+
+# 示例6：完整集成逐个训练（所有7个模型）
+python main.py --mode train --data_dir /path/to/BraTS_data --enable_ensemble --parallel false
+```
+
+##### 集成训练模式对比
+
+| 特性 | 并行训练 (parallel=true) | 逐个训练 (parallel=false) |
+|------|--------------------------|---------------------------|
+| **训练速度** | 快 | 慢 |
+| **内存使用** | 高 | 低 |
+| **GPU利用率** | 高 | 中等 |
+| **模型融合** | 自动（>1个模型） | 自动（>1个模型） |
+| **适用场景** | 资源充足环境 | 资源受限环境 |
+| **推荐程度** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ |
 
 ### 2. 评估模型
 
@@ -73,6 +127,114 @@ python main.py --mode eval --model_path ./outputs/checkpoints/best_model.pth --d
 # 评估集成模型
 python main.py --mode eval --model_path ./outputs/checkpoints/best_model.pth --data_dir /path/to/BraTS_data
 ```
+
+### 3. 模型推理
+
+项目提供了专门的推理模块，用于对新的医学图像进行分割预测。推理模块专注于使用训练过程中保存的最佳模型进行高效推理。
+
+#### 单个文件推理
+
+```bash
+# 使用最佳模型对单个文件进行推理
+python main.py --mode inference \
+    --model_path outputs/checkpoints/best_model.pth \
+    --input data/test_case.nii.gz \
+    --output results/prediction.nii.gz
+
+# 多模态输入（目录格式）
+python main.py --mode inference \
+    --model_path outputs/checkpoints/best_model.pth \
+    --input data/BraTS2021_00001/ \
+    --output results/prediction.nii.gz
+```
+
+#### 批量推理
+
+```bash
+# 批量处理多个文件
+python main.py --mode inference \
+    --model_path outputs/checkpoints/best_model.pth \
+    --input data/test_cases/ \
+    --output results/ \
+    --batch_inference
+```
+
+#### 高级推理配置
+
+```bash
+# 自定义推理参数
+python main.py --mode inference \
+    --model_path outputs/checkpoints/best_model.pth \
+    --input data/test.nii.gz \
+    --output results/pred.nii.gz \
+    --device cuda \
+    --roi_size 128 128 128 \
+    --sw_batch_size 4 \
+    --overlap 0.5 \
+    --no_visualization
+```
+
+#### 推理参数说明
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|---------|
+| `--mode` | str | 必需 | 运行模式，设置为 inference |
+| `--model_path` | str | 必需 | 最佳模型文件路径 |
+| `--input` | str | 必需 | 输入文件或目录路径 |
+| `--output` | str | 必需 | 输出文件或目录路径 |
+| `--device` | str | auto | 计算设备 (auto/cpu/cuda) |
+| `--batch_inference` | flag | False | 启用批量推理模式 |
+| `--roi_size` | int×3 | [128,128,128] | 滑动窗口大小 |
+| `--sw_batch_size` | int | 4 | 滑动窗口批次大小 |
+| `--overlap` | float | 0.6 | 滑动窗口重叠率 |
+| `--no_visualization` | flag | False | 不保存可视化结果 |
+
+#### 推理输出结果
+
+1. **预测结果文件** (`*.nii.gz`)
+   - 分割掩码，包含不同的标签值
+   - 标签含义：0=背景，1=坏死，2=水肿，3=增强肿瘤
+
+2. **可视化文件** (`*_visualization.png`)
+   - 原始图像和预测结果的叠加显示
+   - 中间层切片的可视化
+
+3. **批量推理报告** (`batch_inference_report.json`)
+   - 包含所有文件的推理结果统计
+   - 成功/失败状态和错误信息
+
+#### 编程接口使用
+
+```python
+from inference import InferenceEngine
+
+# 初始化推理引擎（自动查找最佳模型）
+engine = InferenceEngine(
+    model_path='outputs/training_output/',
+    device='cuda'
+)
+
+# 单文件推理
+result = engine.predict_single_case(
+    image_path='data/test.nii.gz',
+    output_path='results/prediction.nii.gz'
+)
+
+# 批量推理
+results = engine.predict_batch(
+    input_dir='data/test_cases/',
+    output_dir='results/'
+)
+```
+
+#### 推理模块特点
+
+- **简化设计**: 专注于使用最佳单个模型进行推理
+- **自动模型发现**: 自动查找并加载训练过程中保存的最佳模型
+- **一致性保证**: 使用与训练时完全相同的预处理流程
+- **高效推理**: 优化的滑动窗口推理策略
+- **可视化输出**: 自动生成预测结果的可视化图像
+- **灵活配置**: 支持自定义推理参数和设备选择
 
 ## 支持的模型
 
@@ -177,6 +339,49 @@ python main.py --mode eval --model_path ./outputs/checkpoints/best_model.pth --d
 
 # 指定输出目录评估
 python main.py --mode eval --model_path ./outputs/checkpoints/best_model.pth --data_dir /path/to/BraTS --output_dir ./my_evaluation
+```
+
+### 模型推理
+
+```bash
+# 单个文件推理
+python main.py --mode inference \
+    --model_path outputs/checkpoints/best_model.pth \
+    --input data/test_case.nii.gz \
+    --output results/prediction.nii.gz
+
+# 批量推理
+python main.py --mode inference \
+    --model_path outputs/checkpoints/best_model.pth \
+    --input data/test_cases/ \
+    --output results/ \
+    --batch_inference
+
+# 高级推理配置
+python main.py --mode inference \
+    --model_path outputs/checkpoints/best_model.pth \
+    --input data/test.nii.gz \
+    --output results/pred.nii.gz \
+    --device cuda \
+    --roi_size 128 128 128 \
+    --sw_batch_size 4 \
+    --overlap 0.5
+
+# GPU加速推理
+python main.py --mode inference \
+    --device cuda \
+    --sw_batch_size 8 \
+    --model_path outputs/checkpoints/best_model.pth \
+    --input data/test.nii.gz \
+    --output results/prediction.nii.gz
+
+# 批量处理优化（禁用可视化）
+python main.py --mode inference \
+    --batch_inference \
+    --no_visualization \
+    --model_path outputs/checkpoints/best_model.pth \
+    --input data/test_cases/ \
+    --output results/
 ```
 
 ## 项目特性
@@ -375,7 +580,7 @@ from pathlib import Path
 from typing import Dict, Any, List
 
 # 导入项目模块
-from train import BraTSTrainer
+from train import ModelTrainer
 from evaluate import BraTSEvaluator
 from model import get_all_supported_models
 from utils import format_time
@@ -556,9 +761,9 @@ import torch.nn.functional as F
 - 导入MONAI的网络架构、损失函数、评估指标
 - 导入推理和变换工具
 
-**第18-40行：SimpleBraTSModel类初始化**
+**第18-40行：BasicModelBank类初始化**
 ```python
-class SimpleBraTSModel:
+class BasicModelBank:
     """
     简化的BraTS分割模型，支持基础模型架构
     """
@@ -675,11 +880,11 @@ def sliding_window_inference(self, inputs: torch.Tensor,
 - 支持大尺寸图像的分块处理
 - 使用高斯权重融合重叠区域
 
-**第221-280行：SimpleEnsembleModel类**
+**第221-280行：BankModelIntegration类**
 ```python
-class SimpleEnsembleModel:
+class BankModelIntegration:
     """集成模型，支持多模型投票"""
-    def __init__(self, models: List[SimpleBraTSModel], device: str = 'auto'):
+    def __init__(self, models: List[BasicModelBank], device: str = 'auto'):
         self.models = models
         self.device = self._setup_device(device)
         
@@ -766,9 +971,9 @@ from monai.utils import set_determinism
 - 导入MONAI的数据加载和变换工具
 - 导入各种数据增强变换
 
-**第31-55行：BraTSDatasetLoader类初始化**
+**第31-55行：DatasetLoader类初始化**
 ```python
-class BraTSDatasetLoader:
+class DatasetLoader:
     """
     BraTS2024-BraTS-GLI数据集加载器
     支持多模态MRI图像（T1, T1ce, T2, FLAIR）和分割标签
@@ -943,8 +1148,8 @@ from typing import Dict, Any
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from DatasetLoader_transforms import BraTSDatasetLoader
-from model import SimpleBraTSModel, SimpleEnsembleModel, create_optimizer, create_scheduler, create_full_ensemble
+from DatasetLoader_transforms import DatasetLoader
+from model import BasicModelBank, BankModelIntegration, create_optimizer, create_scheduler, create_full_ensemble
 from utils import EarlyStopping, ModelCheckpoint, MetricsTracker
 from monai.utils import set_determinism
 from monai.data import decollate_batch
@@ -953,9 +1158,9 @@ from monai.transforms import AsDiscrete, Compose
 - 导入训练所需的所有模块
 - 包括数据加载、模型、工具函数等
 
-**第26-65行：BraTSTrainer类初始化**
+**第26-65行：ModelTrainer类初始化**
 ```python
-class BraTSTrainer:
+class ModelTrainer:
     """BraTS脑肿瘤分割训练器"""
     
     def __init__(self, config: Dict[str, Any]):
@@ -987,7 +1192,7 @@ def _setup_data(self):
     """设置数据加载器"""
     print("设置数据加载器...")
     
-    data_loader = BraTSDatasetLoader(
+    data_loader = DatasetLoader(
         data_dir=self.config['data_dir'],
         cache_rate=self.config.get('cache_rate', 0.1),
         num_workers=self.config.get('num_workers', 4),
@@ -1308,10 +1513,10 @@ def _load_model(self):
         # 创建集成模型
         models = []
         for model_name in ensemble_models:
-            model_creator = SimpleBraTSModel(model_name=model_name, device=self.device)
+            model_creator = BasicModelBank(model_name=model_name, device=self.device)
             models.append(model_creator)
         
-        self.ensemble_model = SimpleEnsembleModel(models, device=self.device)
+        self.ensemble_model = BankModelIntegration(models, device=self.device)
         self.is_ensemble = True
         print(f"成功创建集成模型，包含 {len(ensemble_models)} 个子模型")
 ```
@@ -1325,7 +1530,7 @@ def _setup_data(self):
     """设置数据加载器"""
     print("设置数据加载器...")
     
-    data_loader = BraTSDatasetLoader(
+    data_loader = DatasetLoader(
         data_dir=self.data_dir,
         cache_rate=0.0,  # 评估时不使用缓存
         num_workers=2,
@@ -1788,32 +1993,71 @@ python main.py --mode train \
 ```
 
 #### 多模型训练
-```bash
-# 顺序训练多个模型
-python main.py --mode train \
-    --model_names UNet SegResNet UNETR \
-    --epochs 100 \
-    --data_dir /path/to/BraTS_data
 
-# 训练所有支持的模型
-python main.py --mode train \
-    --model_names UNet SegResNet UNETR SwinUNETR AttentionUNet VNet HighResNet \
-    --epochs 50 \
-    --data_dir /path/to/BraTS_data
+项目支持两种多模型训练模式：
+
+**使用示例**：
+
+以下是6种主要的训练模式，展示了不同参数组合的使用方法：
+
+**1. 多模型默认集成且并行训练**：
+```bash
+# 指定3个模型，默认parallel=true，自动启用集成训练
+python main.py --mode train --data_dir /path/to/BraTS_data --model_names UNet SegResNet UNETR
 ```
 
-#### 集成模型训练
+**2. 多模型集成且并行训练（显式指定）**：
 ```bash
-# 训练集成模型（自动包含所有支持的模型）
+# 指定3个模型，显式设置parallel=true，自动启用集成训练
+python main.py --mode train --data_dir /path/to/BraTS_data --model_names UNet SegResNet UNETR --parallel true
+```
+
+**3. 多模型集成且逐个训练**：
+```bash
+# 指定3个模型，设置parallel=false，自动启用集成训练，逐个训练
+python main.py --mode train --data_dir /path/to/BraTS_data --model_names UNet SegResNet UNETR --parallel false
+```
+
+**4. 完整集成默认并行训练**：
+```bash
+# 启用ensemble，默认parallel=true，训练所有7个模型
+python main.py --mode train --data_dir /path/to/BraTS_data --enable_ensemble
+```
+
+**5. 完整集成并行训练（显式指定）**：
+```bash
+# 启用ensemble，显式设置parallel=true，训练所有7个模型
+python main.py --mode train --data_dir /path/to/BraTS_data --enable_ensemble --parallel true
+```
+
+**6. 完整集成逐个训练**：
+```bash
+# 启用ensemble，设置parallel=false，训练所有7个模型，逐个训练
+python main.py --mode train --data_dir /path/to/BraTS_data --enable_ensemble --parallel false
+```
+
+**参数说明**：
+- `--model_names`: 指定要训练的模型列表，当指定多个模型时自动启用集成训练
+- `--enable_ensemble`: 启用完整集成训练，如果没有指定model_names则训练所有7个模型
+- `--parallel`: 控制训练方式，true（默认）为并行训练，false为逐个训练
+
+**集成机制**：
+当指定多个模型时，系统会自动启用集成训练模式。集成是指将多个不同的模型架构训练后，通过平均预测和投票机制融合成一个新的集成模型，而不是简单地选择其中最好的一个模型。
+
+**逐个集成训练（节省内存）**：
+```bash
+# 训练集成模型（逐个模式，使用BankModelIntegration）
 python main.py --mode train \
     --enable_ensemble \
+    --parallel false \
     --epochs 300 \
     --data_dir /path/to/BraTS_data
 
-# 集成训练结合指定模型
+# 集成训练结合指定模型（逐个模式）
 python main.py --mode train \
     --enable_ensemble \
     --model_names UNet SegResNet UNETR \
+    --parallel false \
     --epochs 250 \
     --data_dir /path/to/BraTS_data
 ```
@@ -1948,7 +2192,7 @@ evaluation_results/
 #### 数据加载问题
 ```bash
 # 检查数据目录结构
-python -c "from DatasetLoader_transforms import BraTSDatasetLoader; loader = BraTSDatasetLoader('/path/to/data'); print('数据检查完成')"
+python -c "from DatasetLoader_transforms import DatasetLoader; loader = DatasetLoader('/path/to/data'); print('数据检查完成')"
 ```
 
 #### 模型加载问题
