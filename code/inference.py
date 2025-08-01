@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-简化版推理模块
-专注于使用训练完成后的最佳单个模型进行推理
-作者: AI Assistant
-日期: 2024
-"""
-
 import os
 import sys
 import argparse
