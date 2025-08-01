@@ -24,8 +24,7 @@ from monai.data import MetaTensor
 
 class InferenceEngine:
     """
-    推理引擎 - 简化版
-    专注于使用单个最佳模型进行推理
+    推理引擎 
     """
     
     def __init__(self, 
@@ -344,7 +343,7 @@ def main():
     """
     命令行接口
     """
-    parser = argparse.ArgumentParser(description='推理模块 - 简化版')
+    parser = argparse.ArgumentParser(description='推理模块')
     
     # 必需参数
     parser.add_argument('--model_path', type=str, required=True,
