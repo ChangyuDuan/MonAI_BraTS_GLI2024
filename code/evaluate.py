@@ -1,20 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-BraTS脑肿瘤分割模型评估脚本
-
-这个脚本用于评估训练好的BraTS脑肿瘤分割模型的性能。
-支持CPU和GPU(CUDA)设备，可通过命令行参数指定模型路径和数据集路径。
-
-使用示例:
-    python evaluate.py --model_path ./outputs/checkpoints/best_model.pth --data_dir /path/to/dataset
-    python evaluate.py --model_path ./outputs/checkpoints/best_model.pth --data_dir /path/to/dataset --device cpu
-    python evaluate.py --model_path ./outputs/checkpoints/best_model.pth --data_dir /path/to/dataset --device cuda --output_dir ./my_results
-
-作者: 个人使用版本
-版本: 3.1.0
-"""
-
 import os
 import torch
 import numpy as np
